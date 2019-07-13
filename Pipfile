@@ -11,3 +11,4 @@ meshio = "*"
 
 [dev-packages]
 pytest = "*"
+twine = "*"
