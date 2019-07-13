@@ -1,2 +1,5 @@
 # cvkit
-Multiple view geometry and camera calibration using projective geometry.
+
+WORK IN PROGRESS!
+
+Multiple view geometry and other Computer Vision algorithms implemented in Python.
