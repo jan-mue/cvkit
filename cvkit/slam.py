@@ -110,7 +110,7 @@ class Scene:
                 R = x[i:i+9].reshape((3, 3))
                 T = x[i+9:i+12]
 
-                result.append(np.linalg.norm(img_points - c.project(X @ R.T + T), axis=1))
+                result.append(np.linalg.norm(img_points @ c.intrinsic_matrix.T - c.project(X @ R.T + T), axis=1))
 
                 i += 12
 
