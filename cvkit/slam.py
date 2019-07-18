@@ -77,7 +77,19 @@ class Scene:
         self._images = []
         self._points = []
 
-    def add(self, camera, image, points=None):
+    def add(self, camera, image, points):
+        """Add a camera, image and points to the scene.
+
+        Parameters
+        ----------
+        camera : Camera
+            The calibrated camera used for the image.
+        image : nd_array
+            The image to add to the scene.
+        points : nd_array
+            The feature points on this image, must have the same shape as other points added to the scene.
+
+        """
         points = np.append(points, np.ones((len(points), 1)), axis=1)
         points = points @ np.linalg.inv(camera.intrinsic_matrix).T
         self._images.append((camera, image))
@@ -98,15 +110,14 @@ class Scene:
                 R = x[i:i+9].reshape((3, 3))
                 T = x[i+9:i+12]
 
-                weights = np.all(~np.isnan(img_points), axis=1)
-                result.append(np.linalg.norm(img_points[weights] - c.project(X[weights] @ R.T + T), axis=1))
+                result.append(np.linalg.norm(img_points - c.project(X @ R.T + T), axis=1))
 
                 i += 12
 
             return np.concatenate(result)
 
         x0 = np.concatenate([a for R, T in camera_motion for a in (np.ravel(R), T)] + [np.ravel(X0)])
-        opt = least_squares(E, np.nan_to_num(x0), method="lm" if n*len(camera_motion) >= 12*len(camera_motion)+3*n else "trf")
+        opt = least_squares(E, np.nan_to_num(x0))
         return opt.x[-3*n:].reshape((n, 3))
 
     @staticmethod
@@ -212,37 +223,17 @@ class Scene:
         return camera_motion, X
 
     def reconstruct(self):
-        points = np.concatenate(self._points, axis=1)
-        visible_count = np.sum(~np.isnan(points), axis=1)
-        visible_first_image = np.isnan(points).argmin(axis=1)
+        """Run a 3D reconstruction for the points in this scene. A bundle adjustment algorithm is executed after
+        the linear reconstruction in the case of a stereo reconstruction.
 
-        result = np.full(self._points[0].shape, np.nan)
+        Returns
+        -------
+        nd_array
+            The reconstructed points.
 
-        for i in np.unique(visible_first_image):
-            for j in np.unique(visible_count):
-                if j <= 3:
-                    continue
+        """
+        camera_motion, X = self._reconstruct_multiple_views(self._points)
 
-                ind = (visible_first_image == i) & (visible_count == j)
-
-                if np.sum(ind) < 8:
-                    continue
-
-                x = np.split(points[ind, i:i+j], j/3, axis=1)
-
-                try:
-                    motion_new, x_new = self._reconstruct_multiple_views(x)
-                except ValueError:
-                    continue
-
-                result[ind] = x_new
-
-                i = int(i / 3)
-                if i == 0:
-                    camera_motion = motion_new
-                elif i + len(motion_new) >= len(camera_motion):
-                    Ri, Ti = camera_motion[i] if i < len(camera_motion) else camera_motion[-1]
-                    camera_motion = camera_motion[:i] + [(R @ Ri, T + Ti) for R, T in motion_new]
-
-        # return self._bundle_adjustment(camera_motion, X)
-        return result
+        if len(camera_motion) == 2:
+            return self._bundle_adjustment(camera_motion, X)
+        return X
